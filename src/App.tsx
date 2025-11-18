@@ -7,6 +7,7 @@ import SettingsPanel from './components/ui/SettingsPanel';
 import Controls from './components/ui/Controls';
 import FileInput from './components/ui/FileInput';
 import { useDroneAnimation } from './hooks/useDroneAnimation';
+import InfoPanel from './components/ui/InfoPanel';
 
 // App is the main component for the drone show simulator.
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const [speedMultiplier, setSpeedMultiplier] = useState(1.0);
   const [spacingMultiplier, setSpacingMultiplier] = useState(1.0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [externalData, setExternalData] = useState(null);
 
   const {
@@ -59,6 +61,7 @@ export default function App() {
           droneCount={droneCount}
           setDroneCount={setDroneCount}
         />
+        <InfoPanel showInfo={showInfo} setShowInfo={setShowInfo} />
       </div>
       <Controls
         isPlaying={isPlaying}
