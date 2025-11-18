@@ -1,35 +1,74 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// This file is the main entry point for the drone show simulator.
+import { useState } from 'react';
+import Canvas2DRenderer from './components/renderers/Canvas2DRenderer';
+import Canvas3DRenderer from './components/renderers/Canvas3DRenderer';
+import Header from './components/ui/Header';
+import SettingsPanel from './components/ui/SettingsPanel';
+import Controls from './components/ui/Controls';
+import FileInput from './components/ui/FileInput';
+import { useDroneAnimation } from './hooks/useDroneAnimation';
 
-function App() {
-  const [count, setCount] = useState(0)
+// App is the main component for the drone show simulator.
+export default function App() {
+  const [viewMode, setViewMode] = useState('2d');
+  const [droneCount, setDroneCount] = useState(1000);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1.0);
+  const [spacingMultiplier, setSpacingMultiplier] = useState(1.0);
+  const [showSettings, setShowSettings] = useState(false);
+  const [externalData, setExternalData] = useState(null);
 
+  const {
+    isPlaying,
+    setIsPlaying,
+    currentTime,
+    setCurrentTime,
+    particlesRef,
+    updateParticlesByTime,
+    timelineInfo,
+    activeSegment
+  } = useDroneAnimation(droneCount, spacingMultiplier, speedMultiplier, externalData);
+
+  const handleFileLoad = (data: any) => {
+    setExternalData(data);
+  };
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="w-full h-screen bg-gray-900 text-white overflow-hidden flex flex-col relative font-sans selection:bg-blue-500 selection:text-white">
+      <div className="flex-1 relative">
+        <FileInput onFileLoad={handleFileLoad} />
+        {viewMode === '2d' ? (
+          <Canvas2DRenderer
+            particlesRef={particlesRef}
+            updateParticles={updateParticlesByTime}
+            droneCount={droneCount}
+          />
+        ) : (
+          <Canvas3DRenderer
+            particlesRef={particlesRef}
+            updateParticles={updateParticlesByTime}
+            droneCount={droneCount}
+          />
+        )}
+        <Header activeSegment={activeSegment} />
+        <SettingsPanel
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+          speedMultiplier={speedMultiplier}
+          setSpeedMultiplier={setSpeedMultiplier}
+          spacingMultiplier={spacingMultiplier}
+          setSpacingMultiplier={setSpacingMultiplier}
+          droneCount={droneCount}
+          setDroneCount={setDroneCount}
+        />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+      <Controls
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+        currentTime={currentTime}
+        setCurrentTime={setCurrentTime}
+        timelineInfo={timelineInfo}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />
+    </div>
+  );
 }
-
-export default App
