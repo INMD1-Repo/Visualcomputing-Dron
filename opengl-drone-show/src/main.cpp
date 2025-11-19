@@ -5,6 +5,7 @@
 #include <string>
 #include <cmath>
 #include <algorithm>
+#include <time.h>
 
 #define GLEW_STATIC
 #include <GL/glew.h>
@@ -58,6 +59,11 @@ int visibleDroneCount = -1; // -1 for all
 bool inTransition = false;
 float transitionDuration = 1500.0f, transitionElapsedTime = 0.0f;
 
+// --- Fireworks State ---
+struct Particle { Vec3 pos; Vec3 vel; Vec3 color; float lifetime; };
+std::vector<Particle> particles;
+bool enableFireworks = false;
+
 // --- Camera & Mouse State ---
 ViewMode currentViewMode = VIEW_3D;
 Vec3 cameraTarget = {0,0,0};
@@ -71,6 +77,7 @@ void triggerTransition(int nextLayer);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
+void spawnFireworks();
 
 // --- Helper Functions ---
 std::string readFile(const char* filePath) { std::ifstream f(filePath); std::stringstream buf; if(f){buf<<f.rdbuf();} return buf.str(); }
@@ -106,8 +113,38 @@ void loadDroneShow(const char* path) {
 void triggerTransition(int nextLayer) {
     if (droneShow.layers.empty() || nextLayer >= (int)droneShow.layers.size() || currentLayer == nextLayer) return;
     inTransition = true; transitionElapsedTime = 0.0f; previousLayer = currentLayer; currentLayer = nextLayer;
-    if (visibleDroneCount == -1 || (size_t)visibleDroneCount > droneShow.layers[nextLayer].points.size()) {
-        visibleDroneCount = droneShow.layers[nextLayer].points.size();
+}
+
+void spawnFireworks() {
+    if (droneShow.layers.empty()) return;
+    const auto& lastLayerPoints = droneShow.layers.back().points;
+    if (lastLayerPoints.empty()) return;
+
+    particles.clear();
+
+    int numExplosions = std::min(15, (int)lastLayerPoints.size());
+    for (int i = 0; i < numExplosions; ++i) {
+        const auto& drone = lastLayerPoints[rand() % lastLayerPoints.size()];
+        Vec3 center = drone.pos;
+        Vec3 color = drone.color;
+        if (rand() % 5 == 0) { // Add some white fireworks
+            color = {1.0f, 1.0f, 1.0f};
+        }
+
+        int numParticlesPerExplosion = 100 + (rand() % 50);
+        for (int j = 0; j < numParticlesPerExplosion; ++j) {
+            Particle p;
+            p.pos = center;
+            float speed = 50.0f + (rand() % 150);
+            float angle1 = (rand() / (float)RAND_MAX) * PI; // Hemisphere
+            float angle2 = (rand() / (float)RAND_MAX) * 2.0f * PI;
+            p.vel.x = speed * sin(angle1) * cos(angle2);
+            p.vel.y = speed * cos(angle1); // Y-up
+            p.vel.z = speed * sin(angle1) * sin(angle2);
+            p.color = color;
+            p.lifetime = 1.5f + (rand() / (float)RAND_MAX) * 2.0f;
+            particles.push_back(p);
+        }
     }
 }
 
@@ -130,11 +167,13 @@ void renderUI() {
     ImGui::Text("Layer: %s", droneShow.layers.empty() ? "N/A" : droneShow.layers[currentLayer].name.c_str());
     ImGui::Text("Drones: %d", visibleDroneCount == -1 ? (int)animationBuffer.size() : visibleDroneCount);
     if (!droneShow.layers.empty()) {
-        int maxDrones = droneShow.layers[currentLayer].points.size();
+        int maxDrones = 2000;
         if (ImGui::SliderInt("Drone Count", &visibleDroneCount, 1, maxDrones)) {
             // Value changed
         }
     }
+    ImGui::Separator();
+    ImGui::Checkbox("Enable Fireworks on Finish", &enableFireworks);
     ImGui::Separator();
     ImGui::Text("View Mode");
     if (ImGui::RadioButton("3D", currentViewMode == VIEW_3D)) { currentViewMode = VIEW_3D; } ImGui::SameLine();
@@ -172,6 +211,8 @@ int main() {
     IMGUI_CHECKVERSION(); ImGui::CreateContext(); ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true); ImGui_ImplOpenGL3_Init(glsl_version);
 
+    srand(time(NULL));
+
     loadDroneShow("assets/example-drone-show.json");
     std::string vsSrc=readFile("src/shader.vert"), fsSrc=readFile("src/shader.frag");
     const char *vs=vsSrc.c_str(), *fs=fsSrc.c_str();
@@ -193,7 +234,14 @@ int main() {
 
         if (isPlaying) {
             elapsedTime += effectiveDeltaTime * 1000;
-            if (elapsedTime > totalDuration) elapsedTime = 0;
+            if (elapsedTime >= totalDuration && totalDuration > 0) {
+                if (enableFireworks) {
+                    spawnFireworks();
+                }
+                elapsedTime = fmod(elapsedTime, totalDuration);
+                if (currentLayer != 0) triggerTransition(0);
+            }
+
             timelinePosition = totalDuration > 0 ? elapsedTime / totalDuration : 0;
             float time_cursor = 0.0f;
             for(size_t i=0; i < droneShow.layers.size(); ++i) {
@@ -222,13 +270,38 @@ int main() {
             if (t >= 1.0f) { inTransition = false; animationBuffer = droneShow.layers[currentLayer].points; }
         }
 
+        // Update and manage particles
+        if (!particles.empty()) {
+            float gravity = 20.0f;
+            for (auto it = particles.begin(); it != particles.end(); ) {
+                it->pos = it->pos + it->vel * effectiveDeltaTime;
+                it->vel.y -= gravity * effectiveDeltaTime;
+                it->lifetime -= effectiveDeltaTime;
+                if (it->lifetime <= 0) {
+                    it = particles.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         int numDronesToRender = (visibleDroneCount == -1) ? animationBuffer.size() : std::min((size_t)visibleDroneCount, animationBuffer.size());
         vertexData.clear();
-        vertexData.reserve(numDronesToRender * 6);
+        vertexData.reserve(numDronesToRender * 6 + particles.size() * 6);
         for (int i = 0; i < numDronesToRender; ++i) {
             const auto& p = animationBuffer[i];
             vertexData.push_back(p.pos.x); vertexData.push_back(p.pos.y); vertexData.push_back(p.pos.z);
             vertexData.push_back(p.color.x); vertexData.push_back(p.color.y); vertexData.push_back(p.color.z);
+        }
+
+        // Add particles to vertex data
+        for (const auto& p : particles) {
+            vertexData.push_back(p.pos.x);
+            vertexData.push_back(p.pos.y);
+            vertexData.push_back(p.pos.z);
+            vertexData.push_back(p.color.x);
+            vertexData.push_back(p.color.y);
+            vertexData.push_back(p.color.z);
         }
 
         glfwPollEvents();
@@ -324,3 +397,5 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
         cameraTarget.y += deltaY * (orthoSize / 500.0f);
     }
 }
+
+
