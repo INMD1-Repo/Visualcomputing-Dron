@@ -15,6 +15,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #include "cJSON.h"
 
 // --- Math & Easing ---
@@ -47,6 +49,7 @@ enum ViewMode { VIEW_3D, VIEW_2D_TOP, VIEW_2D_FRONT };
 
 // --- Globals ---
 DroneShow droneShow;
+DroneLayer groundFormation;
 std::vector<float> vertexData;
 std::vector<DronePoint> animationBuffer;
 int currentLayer = 0, previousLayer = 0;
@@ -54,10 +57,17 @@ bool isPlaying = false;
 float timelinePosition = 0.0f, totalDuration = 0.0f, elapsedTime = 0.0f;
 float playbackSpeed = 1.0f;
 int visibleDroneCount = -1; // -1 for all
+int maxDronesInShow = 0;
+GLuint droneTexture;
+GLuint droneShaderProgram;
+float droneSize = 5.0f;
 
 // --- Animation State ---
+enum InitialAnimationState { PRE_TAKEOFF, TAKING_OFF, DONE };
+InitialAnimationState initialAnimationState = PRE_TAKEOFF;
 bool inTransition = false;
-float transitionDuration = 1500.0f, transitionElapsedTime = 0.0f;
+float transitionDuration = 1500.0f, transitionElapsedTime = 0.0f, preTakeoffTime = 0.0f;
+const float PRE_TAKEOFF_DURATION = 3000.0f; // 3 seconds
 
 // --- Fireworks State ---
 struct Particle { Vec3 pos; Vec3 vel; Vec3 color; float lifetime; };
@@ -78,13 +88,95 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 void spawnFireworks();
+GLuint createShaderProgram(const char* vsPath, const char* fsPath, const char* gsPath = nullptr);
+GLuint loadTexture(const char* path);
 
 // --- Helper Functions ---
 std::string readFile(const char* filePath) { std::ifstream f(filePath); std::stringstream buf; if(f){buf<<f.rdbuf();} return buf.str(); }
 void parseColor(const char* hex, Vec3& color) { if(hex[0]=='#'){ long val=strtol(hex+1,NULL,16); color.x=((val>>16)&0xFF)/255.0f; color.y=((val>>8)&0xFF)/255.0f; color.z=(val&0xFF)/255.0f; } }
 
+GLuint loadTexture(const char* path) {
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data) {
+        GLenum format;
+        if (nrComponents == 1) format = GL_RED;
+        else if (nrComponents == 3) format = GL_RGB;
+        else if (nrComponents == 4) format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    } else {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
+}
+
+GLuint createShaderProgram(const char* vsPath, const char* fsPath, const char* gsPath) {
+    std::string vsSrc = readFile(vsPath), fsSrc = readFile(fsPath);
+    const char *vs = vsSrc.c_str(), *fs = fsSrc.c_str();
+
+    auto compileShader = [](GLuint type, const char* src) {
+        GLuint shader = glCreateShader(type);
+        glShaderSource(shader, 1, &src, NULL);
+        glCompileShader(shader);
+        int success;
+        char infoLog[512];
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(shader, 512, NULL, infoLog);
+            std::cerr << "ERROR::SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
+        }
+        return shader;
+    };
+
+    GLuint vShader = compileShader(GL_VERTEX_SHADER, vs);
+    GLuint fShader = compileShader(GL_FRAGMENT_SHADER, fs);
+    GLuint gShader = 0;
+
+    if (gsPath) {
+        std::string gsSrc = readFile(gsPath);
+        const char *gs = gsSrc.c_str();
+        gShader = compileShader(GL_GEOMETRY_SHADER, gs);
+    }
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vShader);
+    glAttachShader(program, fShader);
+    if (gShader) glAttachShader(program, gShader);
+    glLinkProgram(program);
+
+    int success;
+    char infoLog[512];
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(program, 512, NULL, infoLog);
+        std::cerr << "ERROR::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+    }
+
+    glDeleteShader(vShader);
+    glDeleteShader(fShader);
+    if (gShader) glDeleteShader(gShader);
+
+    return program;
+}
+
+
 void loadDroneShow(const char* path) {
-    droneShow.layers.clear(); totalDuration=0; elapsedTime=0; currentLayer=0; previousLayer=0; visibleDroneCount=-1;
+    droneShow.layers.clear(); totalDuration=0; elapsedTime=0; currentLayer=0; previousLayer=0; visibleDroneCount=-1; maxDronesInShow=0;
     std::string jsonString = readFile(path); if (jsonString.empty()) return;
     cJSON* root = cJSON_Parse(jsonString.c_str()); if (!root) return;
     droneShow.title = cJSON_GetObjectItem(root, "title")->valuestring;
@@ -105,9 +197,43 @@ void loadDroneShow(const char* path) {
             l.points.push_back(p);
         }
         droneShow.layers.push_back(l);
+        if (l.points.size() > (size_t)maxDronesInShow) {
+            maxDronesInShow = l.points.size();
+        }
     }
     cJSON_Delete(root);
-    if (!droneShow.layers.empty()) { animationBuffer = droneShow.layers[0].points; visibleDroneCount = animationBuffer.size(); }
+
+    // Create a "ground" formation
+    groundFormation.points.clear();
+    int drones = maxDronesInShow;
+    int grid_size = ceil(sqrt(drones));
+    float spacing = 20.0f; 
+    for(int i = 0; i < drones; ++i) {
+        DronePoint p;
+        p.pos.x = (i % grid_size - (grid_size - 1) / 2.0f) * spacing;
+        p.pos.y = 0;
+        p.pos.z = (i / grid_size - (grid_size - 1) / 2.0f) * spacing;
+        p.color = {0.8, 0.8, 0.8}; 
+        groundFormation.points.push_back(p);
+    }
+
+    if (!droneShow.layers.empty()) {
+        animationBuffer.assign(groundFormation.points.begin(), groundFormation.points.end());
+        animationBuffer.resize(maxDronesInShow);
+
+        visibleDroneCount = maxDronesInShow;
+        initialAnimationState = PRE_TAKEOFF;
+        preTakeoffTime = 0.0f;
+        transitionElapsedTime = 0.0f;
+        currentLayer = 0;
+        previousLayer = 0;
+        isPlaying = false;
+        timelinePosition = 0.0f;
+        elapsedTime = 0.0f;
+    } else {
+        animationBuffer.clear();
+        visibleDroneCount = 0;
+    }
 }
 
 void triggerTransition(int nextLayer) {
@@ -167,11 +293,11 @@ void renderUI() {
     ImGui::Text("Layer: %s", droneShow.layers.empty() ? "N/A" : droneShow.layers[currentLayer].name.c_str());
     ImGui::Text("Drones: %d", visibleDroneCount == -1 ? (int)animationBuffer.size() : visibleDroneCount);
     if (!droneShow.layers.empty()) {
-        int maxDrones = 2000;
-        if (ImGui::SliderInt("Drone Count", &visibleDroneCount, 1, maxDrones)) {
+        if (ImGui::SliderInt("Drone Count", &visibleDroneCount, 1, maxDronesInShow)) {
             // Value changed
         }
     }
+    ImGui::SliderFloat("Drone Size", &droneSize, 0.1f, 20.0f);
     ImGui::Separator();
     ImGui::Checkbox("Enable Fireworks on Finish", &enableFireworks);
     ImGui::Separator();
@@ -214,25 +340,72 @@ int main() {
     srand(time(NULL));
 
     loadDroneShow("assets/example-drone-show.json");
-    std::string vsSrc=readFile("src/shader.vert"), fsSrc=readFile("src/shader.frag");
-    const char *vs=vsSrc.c_str(), *fs=fsSrc.c_str();
-    GLuint vShader=glCreateShader(GL_VERTEX_SHADER); glShaderSource(vShader,1,&vs,NULL); glCompileShader(vShader);
-    GLuint fShader=glCreateShader(GL_FRAGMENT_SHADER); glShaderSource(fShader,1,&fs,NULL); glCompileShader(fShader);
-    GLuint shaderProg=glCreateProgram(); glAttachShader(shaderProg,vShader); glAttachShader(shaderProg,fShader); glLinkProgram(shaderProg); glDeleteShader(vShader); glDeleteShader(fShader);
+    droneShaderProgram = createShaderProgram("src/shader.vert", "src/shader.frag", "src/shader.geom");
+    droneTexture = loadTexture("assets/drone.png");
 
     GLuint VAO, VBO;
     glGenVertexArrays(1, &VAO); glGenBuffers(1, &VBO);
     glBindVertexArray(VAO); glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
-    glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 
     float lastFrameTime = 0.0f;
     while (!glfwWindowShouldClose(window)) {
         float currentFrameTime = glfwGetTime(); float deltaTime = currentFrameTime - lastFrameTime; lastFrameTime = currentFrameTime;
         float effectiveDeltaTime = deltaTime * playbackSpeed;
 
-        if (isPlaying) {
+        if (initialAnimationState != DONE) {
+            switch(initialAnimationState) {
+                case PRE_TAKEOFF: {
+                    preTakeoffTime += effectiveDeltaTime * 1000;
+                    if (preTakeoffTime >= PRE_TAKEOFF_DURATION) {
+                        initialAnimationState = TAKING_OFF;
+                        transitionElapsedTime = 0.0f;
+                    }
+                    break;
+                }
+                case TAKING_OFF: {
+                    transitionElapsedTime += effectiveDeltaTime * 1000;
+                    float t = std::min(1.0f, transitionElapsedTime / transitionDuration);
+                    float eased_t = easeOutCubic(t);
+
+                    const auto& startPoints = groundFormation.points;
+                    const auto& endPoints = droneShow.layers[0].points;
+
+                    for (size_t i = 0; i < (size_t)maxDronesInShow; ++i) {
+                        bool inEnd = i < endPoints.size();
+                        Vec3 startPos = startPoints[i].pos;
+                        Vec3 endPos = inEnd ? endPoints[i].pos : startPos;
+                        
+                        animationBuffer[i].pos = lerp(startPos, endPos, eased_t);
+                        animationBuffer[i].color = inEnd ? lerp(startPoints[i].color, endPoints[i].color, eased_t) : startPoints[i].color;
+                    }
+
+                    if (t >= 1.0f) {
+                        initialAnimationState = DONE;
+                        const auto& finalPoints = droneShow.layers[0].points;
+                        for(size_t i = 0; i < finalPoints.size(); ++i) {
+                            animationBuffer[i] = finalPoints[i];
+                        }
+                        for(size_t i = finalPoints.size(); i < (size_t)maxDronesInShow; ++i) {
+                            animationBuffer[i].pos = {0, -200.0f, 0};
+                            animationBuffer[i].color = {0,0,0};
+                        }
+                        visibleDroneCount = finalPoints.size();
+                        elapsedTime = 0.0f;
+                        isPlaying = true;
+                    }
+                    break;
+                }
+                case DONE:
+                    break;
+            }
+        }
+        else if (isPlaying) {
             elapsedTime += effectiveDeltaTime * 1000;
             if (elapsedTime >= totalDuration && totalDuration > 0) {
                 if (enableFireworks) {
@@ -259,15 +432,44 @@ int main() {
             float eased_t = easeOutCubic(t);
             const auto& startPoints = droneShow.layers[previousLayer].points;
             const auto& endPoints = droneShow.layers[currentLayer].points;
-            size_t maxDrones = std::max(startPoints.size(), endPoints.size());
-            animationBuffer.resize(maxDrones);
-            for (size_t i = 0; i < maxDrones; ++i) {
-                Vec3 startPos = (i < startPoints.size()) ? startPoints[i].pos : endPoints[i].pos;
-                Vec3 endPos = (i < endPoints.size()) ? endPoints[i].pos : startPoints[i].pos;
+
+            for (size_t i = 0; i < (size_t)maxDronesInShow; ++i) {
+                bool inStart = i < startPoints.size();
+                bool inEnd = i < endPoints.size();
+                Vec3 startPos, endPos;
+
+                if (inStart && inEnd) { // Exists in both, normal transition
+                    startPos = startPoints[i].pos;
+                    endPos = endPoints[i].pos;
+                } else if (inStart) { // Disappearing drone
+                    startPos = startPoints[i].pos;
+                    endPos = {startPoints[i].pos.x, -200.0f, startPoints[i].pos.z};
+                } else if (inEnd) { // Appearing drone
+                    startPos = {endPoints[i].pos.x, -200.0f, endPoints[i].pos.z};
+                    endPos = endPoints[i].pos;
+                } else { // Inactive drone
+                    startPos = endPos = {0, -200.0f, 0};
+                }
+
                 animationBuffer[i].pos = lerp(startPos, endPos, eased_t);
-                animationBuffer[i].color = (i < endPoints.size()) ? endPoints[i].color : startPoints[i].color;
+                
+                Vec3 startColor = inStart ? startPoints[i].color : Vec3{0,0,0};
+                Vec3 endColor = inEnd ? endPoints[i].color : Vec3{0,0,0};
+                animationBuffer[i].color = lerp(startColor, endColor, eased_t);
             }
-            if (t >= 1.0f) { inTransition = false; animationBuffer = droneShow.layers[currentLayer].points; }
+
+            if (t >= 1.0f) {
+                inTransition = false;
+                const auto& finalPoints = droneShow.layers[currentLayer].points;
+                for(size_t i = 0; i < finalPoints.size(); ++i) {
+                    animationBuffer[i] = finalPoints[i];
+                }
+                for(size_t i = finalPoints.size(); i < (size_t)maxDronesInShow; ++i) {
+                     animationBuffer[i].pos = {0, -200.0f, 0};
+                     animationBuffer[i].color = {0,0,0};
+                }
+                visibleDroneCount = finalPoints.size();
+            }
         }
 
         // Update and manage particles
@@ -317,7 +519,8 @@ int main() {
         if (!vertexData.empty()) {
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
             glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
-            glUseProgram(shaderProg);
+            
+            glUseProgram(droneShaderProgram);
             Mat4 model = identity(), view, projection;
             float aspect = (float)display_w / (float)display_h;
             Vec3 camPos;
@@ -339,9 +542,15 @@ int main() {
                     view = lookAt({cameraTarget.x, cameraTarget.y, 500}, cameraTarget, {0, 1, 0});
                     break;
             }
-            glUniformMatrix4fv(glGetUniformLocation(shaderProg, "model"), 1, GL_FALSE, model.m);
-            glUniformMatrix4fv(glGetUniformLocation(shaderProg, "view"), 1, GL_FALSE, view.m);
-            glUniformMatrix4fv(glGetUniformLocation(shaderProg, "projection"), 1, GL_FALSE, projection.m);
+            glUniformMatrix4fv(glGetUniformLocation(droneShaderProgram, "model"), 1, GL_FALSE, model.m);
+            glUniformMatrix4fv(glGetUniformLocation(droneShaderProgram, "view"), 1, GL_FALSE, view.m);
+            glUniformMatrix4fv(glGetUniformLocation(droneShaderProgram, "projection"), 1, GL_FALSE, projection.m);
+            glUniform1f(glGetUniformLocation(droneShaderProgram, "drone_size"), droneSize);
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, droneTexture);
+            glUniform1i(glGetUniformLocation(droneShaderProgram, "droneTexture"), 0);
+
             glBindVertexArray(VAO);
             glDrawArrays(GL_POINTS, 0, vertexData.size() / 6);
         }
@@ -350,7 +559,9 @@ int main() {
         glfwSwapBuffers(window);
     }
 
-    glDeleteVertexArrays(1, &VAO); glDeleteBuffers(1, &VBO); glDeleteProgram(shaderProg);
+    glDeleteVertexArrays(1, &VAO); glDeleteBuffers(1, &VBO); 
+    glDeleteProgram(droneShaderProgram);
+    glDeleteTextures(1, &droneTexture);
     ImGui_ImplOpenGL3_Shutdown(); ImGui_ImplGlfw_Shutdown(); ImGui::DestroyContext();
     glfwDestroyWindow(window); glfwTerminate();
     return 0;

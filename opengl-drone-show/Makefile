@@ -1,7 +1,7 @@
 # Compiler and flags
 CXX = g++
 CXXFLAGS = -std=c++11 -Wall -Wextra -g
-CPPFLAGS = -I./vendor/glew/include -I./vendor/cJSON -I./vendor/imgui
+CPPFLAGS = -I./vendor/glew/include -I./vendor/cJSON -I./vendor/imgui -I./vendor/stb
 
 # Linker flags
 LDFLAGS = -lglfw -lGL -lpthread -ldl
