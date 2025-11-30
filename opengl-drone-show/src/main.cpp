@@ -22,6 +22,7 @@
 // --- Math & Easing ---
 const float PI = 3.1415926535f;
 struct Vec3 { float x, y, z; };
+struct Vec4 { float x, y, z, w; };
 Vec3 operator+(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vec3 operator*(Vec3 a, float s) { return {a.x * s, a.y * s, a.z * s}; }
@@ -33,6 +34,27 @@ Vec3 normalize(Vec3 v) {
     return {0, 0, 0};
 }
 Vec3 lerp(Vec3 start, Vec3 end, float t) { return start * (1.0f - t) + end * t; }
+Vec4 lerp(Vec4 start, Vec4 end, float t) { return {start.x * (1.0f - t) + end.x * t, start.y * (1.0f - t) + end.y * t, start.z * (1.0f - t) + end.z * t, start.w * (1.0f - t) + end.w * t}; }
+Vec3 naturalLerp(Vec3 start, Vec3 end, float t, int droneIndex) {
+    Vec3 lerpedPos = lerp(start, end, t);
+    if (t > 0.01f && t < 0.99f) { // Avoid deviation at start and end
+        float frequency = 2.0f;
+        float magnitude = 20.0f * (1.0f - pow(2.0f * t - 1.0f, 4.0f)); // Strongest deviation in the middle
+
+        Vec3 path = end - start;
+        Vec3 randomDir = {(float)sin(droneIndex * 2.3f), (float)cos(droneIndex * 5.1f), (float)sin(droneIndex * 1.7f)};
+        Vec3 perpendicular = normalize(cross(path, randomDir));
+        if (dot(perpendicular, perpendicular) < 0.1f) { // Handle case where path and randomDir are parallel
+            perpendicular = normalize(cross(path, {1,0,0}));
+            if (dot(perpendicular, perpendicular) < 0.1f) {
+                 perpendicular = normalize(cross(path, {0,1,0}));
+            }
+        }
+        
+        lerpedPos = lerpedPos + perpendicular * magnitude * sin(t * PI);
+    }
+    return lerpedPos;
+}
 float easeOutCubic(float t) { return 1.0f - pow(1.0f - t, 3.0f); }
 
 struct Mat4 { float m[16] = {0}; };
@@ -42,7 +64,7 @@ Mat4 orthographic(float l, float r, float b, float t, float n, float f) { Mat4 m
 Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) { Vec3 f=normalize(center-eye); Vec3 s=normalize(cross(f,up)); Vec3 u=cross(s,f); Mat4 mat=identity(); mat.m[0]=s.x; mat.m[4]=s.y; mat.m[8]=s.z; mat.m[1]=u.x; mat.m[5]=u.y; mat.m[9]=u.z; mat.m[2]=-f.x; mat.m[6]=-f.y; mat.m[10]=-f.z; mat.m[12]=-dot(s,eye); mat.m[13]=-dot(u,eye); mat.m[14]=dot(f,eye); return mat; }
 
 // --- Data Structures ---
-struct DronePoint { Vec3 pos; Vec3 color; };
+struct DronePoint { Vec3 pos; Vec4 color; };
 struct DroneLayer { std::string id; std::string name; int duration; std::vector<DronePoint> points; };
 struct DroneShow { std::string title; std::vector<DroneLayer> layers; };
 enum ViewMode { VIEW_3D, VIEW_2D_TOP, VIEW_2D_FRONT };
@@ -70,7 +92,7 @@ float transitionDuration = 1500.0f, transitionElapsedTime = 0.0f, preTakeoffTime
 const float PRE_TAKEOFF_DURATION = 3000.0f; // 3 seconds
 
 // --- Fireworks State ---
-struct Particle { Vec3 pos; Vec3 vel; Vec3 color; float lifetime; };
+struct Particle { Vec3 pos; Vec3 vel; Vec4 color; float lifetime; };
 std::vector<Particle> particles;
 bool enableFireworks = false;
 
@@ -93,7 +115,7 @@ GLuint loadTexture(const char* path);
 
 // --- Helper Functions ---
 std::string readFile(const char* filePath) { std::ifstream f(filePath); std::stringstream buf; if(f){buf<<f.rdbuf();} return buf.str(); }
-void parseColor(const char* hex, Vec3& color) { if(hex[0]=='#'){ long val=strtol(hex+1,NULL,16); color.x=((val>>16)&0xFF)/255.0f; color.y=((val>>8)&0xFF)/255.0f; color.z=(val&0xFF)/255.0f; } }
+void parseColor(const char* hex, Vec4& color) { if(hex[0]=='#'){ long val=strtol(hex+1,NULL,16); color.x=((val>>16)&0xFF)/255.0f; color.y=((val>>8)&0xFF)/255.0f; color.z=(val&0xFF)/255.0f; color.w=1.0f;} }
 
 GLuint loadTexture(const char* path) {
     GLuint textureID;
@@ -211,9 +233,9 @@ void loadDroneShow(const char* path) {
     for(int i = 0; i < drones; ++i) {
         DronePoint p;
         p.pos.x = (i % grid_size - (grid_size - 1) / 2.0f) * spacing;
-        p.pos.y = 0;
+        p.pos.y = -200.0f;
         p.pos.z = (i / grid_size - (grid_size - 1) / 2.0f) * spacing;
-        p.color = {0.8, 0.8, 0.8}; 
+        p.color = {0.8, 0.8, 0.8, 1.0}; 
         groundFormation.points.push_back(p);
     }
 
@@ -252,9 +274,9 @@ void spawnFireworks() {
     for (int i = 0; i < numExplosions; ++i) {
         const auto& drone = lastLayerPoints[rand() % lastLayerPoints.size()];
         Vec3 center = drone.pos;
-        Vec3 color = drone.color;
+        Vec4 color = { (float)(rand() % 256) / 255.0f, (float)(rand() % 256) / 255.0f, (float)(rand() % 256) / 255.0f, 1.0f};
         if (rand() % 5 == 0) { // Add some white fireworks
-            color = {1.0f, 1.0f, 1.0f};
+            color = {1.0f, 1.0f, 1.0f, 1.0f};
         }
 
         int numParticlesPerExplosion = 100 + (rand() % 50);
@@ -346,8 +368,10 @@ int main() {
     GLuint VAO, VBO;
     glGenVertexArrays(1, &VAO); glGenBuffers(1, &VBO);
     glBindVertexArray(VAO); glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)0); glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -381,81 +405,83 @@ int main() {
                         Vec3 startPos = startPoints[i].pos;
                         Vec3 endPos = inEnd ? endPoints[i].pos : startPos;
                         
-                        animationBuffer[i].pos = lerp(startPos, endPos, eased_t);
-                        animationBuffer[i].color = inEnd ? lerp(startPoints[i].color, endPoints[i].color, eased_t) : startPoints[i].color;
-                    }
-
-                    if (t >= 1.0f) {
-                        initialAnimationState = DONE;
-                        const auto& finalPoints = droneShow.layers[0].points;
-                        for(size_t i = 0; i < finalPoints.size(); ++i) {
-                            animationBuffer[i] = finalPoints[i];
-                        }
-                        for(size_t i = finalPoints.size(); i < (size_t)maxDronesInShow; ++i) {
-                            animationBuffer[i].pos = {0, -200.0f, 0};
-                            animationBuffer[i].color = {0,0,0};
-                        }
-                        visibleDroneCount = finalPoints.size();
-                        elapsedTime = 0.0f;
-                        isPlaying = true;
-                    }
-                    break;
-                }
-                case DONE:
-                    break;
+                        animationBuffer[i].pos = naturalLerp(startPos, endPos, eased_t, i);
+                        Vec4 startColor = startPoints[i].color;
+                        Vec4 endColor = inEnd ? endPoints[i].color : Vec4{0,0,0,0};
+                        animationBuffer[i].color = lerp(startColor, endColor, eased_t);
             }
+
+            if (t >= 1.0f) {
+                initialAnimationState = DONE;
+                const auto& finalPoints = droneShow.layers[0].points;
+                for(size_t i = 0; i < finalPoints.size(); ++i) {
+                    animationBuffer[i] = finalPoints[i];
+                }
+                for(size_t i = finalPoints.size(); i < (size_t)maxDronesInShow; ++i) {
+                    animationBuffer[i].pos = {0, -200.0f, 0};
+                    animationBuffer[i].color = {0,0,0,0};
+                }
+                visibleDroneCount = finalPoints.size();
+                elapsedTime = 0.0f;
+                isPlaying = true;
+            }
+            break;
         }
-        else if (isPlaying) {
-            elapsedTime += effectiveDeltaTime * 1000;
-            if (elapsedTime >= totalDuration && totalDuration > 0) {
-                if (enableFireworks) {
-                    spawnFireworks();
-                }
-                elapsedTime = fmod(elapsedTime, totalDuration);
-                if (currentLayer != 0) triggerTransition(0);
-            }
+        case DONE:
+            break;
+    }
+}
+else if (isPlaying) {
+    elapsedTime += effectiveDeltaTime * 1000;
+    if (elapsedTime >= totalDuration && totalDuration > 0) {
+        if (enableFireworks) {
+            spawnFireworks();
+        }
+        elapsedTime = fmod(elapsedTime, totalDuration);
+        if (currentLayer != 0) triggerTransition(0);
+    }
 
-            timelinePosition = totalDuration > 0 ? elapsedTime / totalDuration : 0;
-            float time_cursor = 0.0f;
-            for(size_t i=0; i < droneShow.layers.size(); ++i) {
-                time_cursor += droneShow.layers[i].duration;
-                if (elapsedTime < time_cursor) {
-                    if (currentLayer != (int)i && !inTransition) triggerTransition((int)i);
-                    break;
-                }
-            }
+    timelinePosition = totalDuration > 0 ? elapsedTime / totalDuration : 0;
+    float time_cursor = 0.0f;
+    for(size_t i=0; i < droneShow.layers.size(); ++i) {
+        time_cursor += droneShow.layers[i].duration;
+        if (elapsedTime < time_cursor) {
+            if (currentLayer != (int)i && !inTransition) triggerTransition((int)i);
+            break;
+        }
+    }
+}
+
+if (inTransition) {
+    transitionElapsedTime += effectiveDeltaTime * 1000;
+    float t = std::min(1.0f, transitionElapsedTime / transitionDuration);
+    float eased_t = easeOutCubic(t);
+    const auto& startPoints = droneShow.layers[previousLayer].points;
+    const auto& endPoints = droneShow.layers[currentLayer].points;
+
+    for (size_t i = 0; i < (size_t)maxDronesInShow; ++i) {
+        bool inStart = i < startPoints.size();
+        bool inEnd = i < endPoints.size();
+        Vec3 startPos, endPos;
+
+        if (inStart && inEnd) { // Exists in both, normal transition
+            startPos = startPoints[i].pos;
+            endPos = endPoints[i].pos;
+        } else if (inStart) { // Disappearing drone
+            startPos = startPoints[i].pos;
+            endPos = {startPoints[i].pos.x + (float)sin(i) * 50.0f, -250.0f, startPoints[i].pos.z + (float)cos(i) * 50.0f};
+        } else if (inEnd) { // Appearing drone
+            startPos = {endPoints[i].pos.x + (float)sin(i) * 50.0f, -250.0f, endPoints[i].pos.z + (float)cos(i) * 50.0f};
+            endPos = endPoints[i].pos;
+        } else { // Inactive drone
+            startPos = endPos = {0, -200.0f, 0};
         }
 
-        if (inTransition) {
-            transitionElapsedTime += effectiveDeltaTime * 1000;
-            float t = std::min(1.0f, transitionElapsedTime / transitionDuration);
-            float eased_t = easeOutCubic(t);
-            const auto& startPoints = droneShow.layers[previousLayer].points;
-            const auto& endPoints = droneShow.layers[currentLayer].points;
-
-            for (size_t i = 0; i < (size_t)maxDronesInShow; ++i) {
-                bool inStart = i < startPoints.size();
-                bool inEnd = i < endPoints.size();
-                Vec3 startPos, endPos;
-
-                if (inStart && inEnd) { // Exists in both, normal transition
-                    startPos = startPoints[i].pos;
-                    endPos = endPoints[i].pos;
-                } else if (inStart) { // Disappearing drone
-                    startPos = startPoints[i].pos;
-                    endPos = {startPoints[i].pos.x, -200.0f, startPoints[i].pos.z};
-                } else if (inEnd) { // Appearing drone
-                    startPos = {endPoints[i].pos.x, -200.0f, endPoints[i].pos.z};
-                    endPos = endPoints[i].pos;
-                } else { // Inactive drone
-                    startPos = endPos = {0, -200.0f, 0};
-                }
-
-                animationBuffer[i].pos = lerp(startPos, endPos, eased_t);
-                
-                Vec3 startColor = inStart ? startPoints[i].color : Vec3{0,0,0};
-                Vec3 endColor = inEnd ? endPoints[i].color : Vec3{0,0,0};
-                animationBuffer[i].color = lerp(startColor, endColor, eased_t);
+        animationBuffer[i].pos = naturalLerp(startPos, endPos, eased_t, i);
+        
+        Vec4 startColor = inStart ? startPoints[i].color : Vec4{0,0,0,0};
+        Vec4 endColor = inEnd ? endPoints[i].color : Vec4{0,0,0,0};
+        animationBuffer[i].color = lerp(startColor, endColor, eased_t);
             }
 
             if (t >= 1.0f) {
@@ -466,7 +492,7 @@ int main() {
                 }
                 for(size_t i = finalPoints.size(); i < (size_t)maxDronesInShow; ++i) {
                      animationBuffer[i].pos = {0, -200.0f, 0};
-                     animationBuffer[i].color = {0,0,0};
+                     animationBuffer[i].color = {0,0,0,0};
                 }
                 visibleDroneCount = finalPoints.size();
             }
@@ -489,11 +515,11 @@ int main() {
 
         int numDronesToRender = (visibleDroneCount == -1) ? animationBuffer.size() : std::min((size_t)visibleDroneCount, animationBuffer.size());
         vertexData.clear();
-        vertexData.reserve(numDronesToRender * 6 + particles.size() * 6);
+        vertexData.reserve(numDronesToRender * 7 + particles.size() * 7);
         for (int i = 0; i < numDronesToRender; ++i) {
             const auto& p = animationBuffer[i];
             vertexData.push_back(p.pos.x); vertexData.push_back(p.pos.y); vertexData.push_back(p.pos.z);
-            vertexData.push_back(p.color.x); vertexData.push_back(p.color.y); vertexData.push_back(p.color.z);
+            vertexData.push_back(p.color.x); vertexData.push_back(p.color.y); vertexData.push_back(p.color.z); vertexData.push_back(p.color.w);
         }
 
         // Add particles to vertex data
@@ -504,6 +530,7 @@ int main() {
             vertexData.push_back(p.color.x);
             vertexData.push_back(p.color.y);
             vertexData.push_back(p.color.z);
+            vertexData.push_back(p.color.w);
         }
 
         glfwPollEvents();
@@ -552,7 +579,7 @@ int main() {
             glUniform1i(glGetUniformLocation(droneShaderProgram, "droneTexture"), 0);
 
             glBindVertexArray(VAO);
-            glDrawArrays(GL_POINTS, 0, vertexData.size() / 6);
+            glDrawArrays(GL_POINTS, 0, vertexData.size() / 7);
         }
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

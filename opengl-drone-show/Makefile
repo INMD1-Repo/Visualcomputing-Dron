@@ -4,10 +4,29 @@ CXXFLAGS = -std=c++11 -Wall -Wextra -g
 CPPFLAGS = -I./vendor/glew/include -I./vendor/cJSON -I./vendor/imgui -I./vendor/stb
 
 # Linker flags
+# Default to Linux flags
 LDFLAGS = -lglfw -lGL -lpthread -ldl
+TARGET = drone_show
+CLEAN_CMD = rm -f
+
+# Check for Windows NT
+ifeq ($(OS), Windows_NT)
+    LDFLAGS = -lglfw3 -lopengl32 -lgdi32
+    TARGET = drone_show.exe
+    CLEAN_CMD = del /F /Q
+else
+    # For non-Windows (Linux, macOS), check for uname
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S), Linux)
+        # Linux flags (already set as default)
+    endif
+    ifeq ($(UNAME_S), Darwin)
+        # macOS specific flags can be added here
+    endif
+endif
 
 # Target executable
-TARGET = drone_show
+# TARGET is now set based on OS
 
 # Source files
 # Application sources
@@ -24,7 +43,6 @@ VENDOR_SRC = vendor/glew/src/glew.c \
 
 # Object files
 OBJ = $(SRC:.cpp=.o)
-VENDOR_OBJ = $(VENDOR_SRC:.c=.o)
 VENDOR_OBJ_CPP = $(filter %.cpp, $(VENDOR_SRC))
 VENDOR_OBJ_C = $(filter %.c, $(VENDOR_SRC))
 
@@ -51,6 +69,10 @@ $(TARGET): $(OBJ) $(VENDOR_OBJ_FROM_CPP) $(VENDOR_OBJ_FROM_C)
 
 # Clean rule
 clean:
-	rm -f src/*.o vendor/glew/src/*.o vendor/cJSON/*.o vendor/imgui/*.o $(TARGET)
+	-$(CLEAN_CMD) src\*.o
+	-$(CLEAN_CMD) vendor\glew\src\*.o
+	-$(CLEAN_CMD) vendor\cJSON\*.o
+	-$(CLEAN_CMD) vendor\imgui\*.o
+	-$(CLEAN_CMD) $(TARGET)
 
 .PHONY: all clean
