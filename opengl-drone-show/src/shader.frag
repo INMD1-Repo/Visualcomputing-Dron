@@ -1,25 +1,25 @@
 #version 330 core
 
-// ÃÖÁ¾ Ãâ·ÂµÉ ÇÈ¼¿ »ö»ó
+// ìµœì¢… ì¶œë ¥ë  í”½ì…€ ìƒ‰ìƒ
 out vec4 FragColor;
 
-// Á¤Á¡ ¼ÎÀÌ´õ¿¡¼­ Àü´ÞµÈ »ö»ó(Á¶¸í, Vertex Color µî)
+// ì •ì  ì…°ì´ë”ì—ì„œ ì „ë‹¬ëœ ìƒ‰ìƒ(ì¡°ëª…, Vertex Color ë“±)
 in vec4 fColor;
-// Á¤Á¡ ¼ÎÀÌ´õ¿¡¼­ Àü´ÞµÈ ÅØ½ºÃ³ ÁÂÇ¥
+// ì •ì  ì…°ì´ë”ì—ì„œ ì „ë‹¬ëœ í…ìŠ¤ì²˜ ì¢Œí‘œ
 in vec2 fTexCoords;
 
-// »ç¿ëÇÒ ÅØ½ºÃ³(µå·Ð ÀÌ¹ÌÁö)
+// ì‚¬ìš©í•  í…ìŠ¤ì²˜(ë“œë¡  ì´ë¯¸ì§€)
 uniform sampler2D droneTexture;
 
 void main()
 {
-    // ÅØ½ºÃ³¿¡¼­ ÇØ´ç ÁÂÇ¥ÀÇ »ö»ó °ªÀ» »ùÇÃ¸µ
+    // í…ìŠ¤ì²˜ì—ì„œ í•´ë‹¹ ì¢Œí‘œì˜ ìƒ‰ìƒ ê°’ì„ ìƒ˜í”Œë§
     vec4 texColor = texture(droneTexture, fTexCoords);
 
-    // ÅØ½ºÃ³ÀÇ ¾ËÆÄ °ªÀÌ ³·À¸¸é(Åõ¸íÇÑ ºÎºÐÀÌ¸é) ÇÈ¼¿À» ±×¸®Áö ¾ÊÀ½
+    // í…ìŠ¤ì²˜ì˜ ì•ŒíŒŒ ê°’ì´ ë‚®ìœ¼ë©´(íˆ¬ëª…í•œ ë¶€ë¶„ì´ë©´) í”½ì…€ì„ ê·¸ë¦¬ì§€ ì•ŠìŒ
     if (texColor.a < 0.1)
         discard;
 
-    // Á¤Á¡ »ö»ó°ú ÅØ½ºÃ³ »ö»óÀ» °öÇØ ÃÖÁ¾ »ö»óÀ¸·Î Ãâ·Â
-    FragColor = fColor * texColor;
+    // Use vertex color RGB, and multiply alpha with texture alpha
+    FragColor = vec4(fColor.rgb, fColor.a * texColor.a);
 }

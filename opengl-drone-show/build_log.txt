@@ -1,0 +1,84 @@
+g++ -std=c++11 -Wall -Wextra -g -I./vendor/glew/include -I./vendor/cJSON -I./vendor/imgui -I./vendor/stb -c src/main.cpp -o src/main.o
+src/main.cpp: In function ‘Vec3 naturalLerp(Vec3, Vec3, float, int)’:
+src/main.cpp:53:11: warning: unused variable ‘frequency’ [-Wunused-variable]
+   53 |     float frequency = 2.0f;
+      |           ^~~~~~~~~
+src/main.cpp: In function ‘int main()’:
+src/main.cpp:627:34: warning: comparison of integer expressions of different signedness: ‘size_t’ {aka ‘long unsigned int’} and ‘int’ [-Wsign-compare]
+  627 |           float targetScale = (i < visibleDroneCount) ? 1.0f : 0.0f;
+      |                                ~~^~~~~~~~~~~~~~~~~~~
+src/main.cpp:640:13: error: ‘t’ was not declared in this scope; did you mean ‘tm’?
+  640 |         if (t >= 1.0f) {
+      |             ^
+      |             tm
+src/main.cpp:596:14: warning: enumeration value ‘DONE’ not handled in switch [-Wswitch]
+  596 |       switch (initialAnimationState) {
+      |              ^
+src/main.cpp:663:5: error: case label ‘DONE’ not within a switch statement
+  663 |     case DONE:
+      |     ^~~~
+src/main.cpp:667:3: error: ‘else’ without a previous ‘if’
+  667 |   else if (isPlaying) {
+      |   ^~~~
+src/main.cpp:668:20: error: ‘effectiveDeltaTime’ was not declared in this scope
+  668 |     elapsedTime += effectiveDeltaTime * 1000;
+      |                    ^~~~~~~~~~~~~~~~~~
+src/main.cpp:691:30: error: ‘effectiveDeltaTime’ was not declared in this scope
+  691 |     transitionElapsedTime += effectiveDeltaTime * 1000;
+      |                              ^~~~~~~~~~~~~~~~~~
+src/main.cpp:742:37: error: ‘effectiveDeltaTime’ was not declared in this scope
+  742 |       it->pos = it->pos + it->vel * effectiveDeltaTime;
+      |                                     ^~~~~~~~~~~~~~~~~~
+src/main.cpp:759:31: error: ‘effectiveDeltaTime’ was not declared in this scope
+  759 |     float scaleSpeed = 5.0f * effectiveDeltaTime; // Faster during show
+      |                               ^~~~~~~~~~~~~~~~~~
+src/main.cpp: At global scope:
+src/main.cpp:868:21: error: expected constructor, destructor, or type conversion before ‘(’ token
+  868 | glDeleteVertexArrays(1, &VAO);
+      |                     ^
+src/main.cpp:869:16: error: expected constructor, destructor, or type conversion before ‘(’ token
+  869 | glDeleteBuffers(1, &VBO);
+      |                ^
+src/main.cpp:870:16: error: expected constructor, destructor, or type conversion before ‘(’ token
+  870 | glDeleteProgram(droneShaderProgram);
+      |                ^
+src/main.cpp:871:17: error: expected constructor, destructor, or type conversion before ‘(’ token
+  871 | glDeleteTextures(1, &droneTexture);
+      |                 ^
+src/main.cpp:872:29: error: expected constructor, destructor, or type conversion before ‘;’ token
+  872 | ImGui_ImplOpenGL3_Shutdown();
+      |                             ^
+src/main.cpp:873:26: error: expected constructor, destructor, or type conversion before ‘;’ token
+  873 | ImGui_ImplGlfw_Shutdown();
+      |                          ^
+src/main.cpp:874:24: error: expected constructor, destructor, or type conversion before ‘;’ token
+  874 | ImGui::DestroyContext();
+      |                        ^
+src/main.cpp:875:18: error: expected constructor, destructor, or type conversion before ‘(’ token
+  875 | glfwDestroyWindow(window);
+      |                  ^
+src/main.cpp:876:16: error: expected constructor, destructor, or type conversion before ‘;’ token
+  876 | glfwTerminate();
+      |                ^
+src/main.cpp:877:1: error: expected unqualified-id before ‘return’
+  877 | return 0;
+      | ^~~~~~
+src/main.cpp:878:1: error: expected declaration before ‘}’ token
+  878 | }
+      | ^
+src/main.cpp: In function ‘void scroll_callback(GLFWwindow*, double, double)’:
+src/main.cpp:881:34: warning: unused parameter ‘window’ [-Wunused-parameter]
+  881 | void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+      |                      ~~~~~~~~~~~~^~~~~~
+src/main.cpp:881:49: warning: unused parameter ‘xoffset’ [-Wunused-parameter]
+  881 | void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+      |                                          ~~~~~~~^~~~~~~
+src/main.cpp: In function ‘void mouse_button_callback(GLFWwindow*, int, int, int)’:
+src/main.cpp:896:32: warning: unused parameter ‘mods’ [-Wunused-parameter]
+  896 |                            int mods) {
+      |                            ~~~~^~~~
+src/main.cpp: In function ‘void cursor_position_callback(GLFWwindow*, double, double)’:
+src/main.cpp:909:43: warning: unused parameter ‘window’ [-Wunused-parameter]
+  909 | void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
+      |                               ~~~~~~~~~~~~^~~~~~
+make: *** [Makefile:64: src/main.o] 오류 1
