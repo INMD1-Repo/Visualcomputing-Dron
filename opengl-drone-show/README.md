@@ -1,114 +1,98 @@
-# OpenGL Drone Show
-
-This project is a C++/OpenGL version of a web-based drone show simulator. It uses GLFW for windowing, GLEW for OpenGL extensions, Dear ImGui for the UI, and cJSON for parsing drone show files.
-
-## Prerequisites
-
-Before compiling, you need to set up the appropriate build environment for your operating system.
-
-### For Windows
-
-The recommended way to build on Windows is by using the MSYS2 environment.
-
-1.  **Install MSYS2:** Download and install MSYS2 from the official website: [https://www.msys2.org/](https://www.msys2.org/)
-
-2.  **Open MSYS2 Terminal:** After installation, launch the "MSYS2 MINGW64" terminal.
-
-3.  **Update Packages:** Run the following command to update the package database and core packages. Close the terminal and reopen it if prompted.
-    ```sh
-    pacman -Syu
-    ```
-
-4.  **Install Build Tools:** Install the C++ compiler (`g++`), `make`, and the `glfw` library by running:
-    ```sh
-    pacman -S --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-glfw make
-    ```
-
-### For Debian/Ubuntu
-
-You can install the required packages using `apt-get`:
-```bash
-sudo apt-get update
-sudo apt-get install build-essential g++ make libglfw3-dev
-```
-
-## Build and Run
-
-Once the prerequisites for your OS are installed, you can build and run the project using the provided `Makefile`.
-
-1.  **Navigate to Project Directory:** Open your terminal (MSYS2 MINGW64 on Windows) and navigate to the project's root directory.
-
-2.  **Build the Project:** Run the `make` command.
-    ```sh
-    make
-    ```
-
-3.  **Run the Application:** This will create an executable file.
-    *   On Windows: `drone_show.exe`
-    *   On Linux/macOS: `drone_show`
-
-    Run it from the terminal:
-    ```sh
-    # On Windows
-    ./drone_show.exe
-
-    # On Linux
-    ./drone_show
-    ```
 # OpenGL 드론 쇼
 
-이 프로젝트는 웹 기반 드론 쇼 시뮬레이터의 C++/OpenGL 버전입니다. GLFW로 창을 생성하고, GLEW로 OpenGL 확장을 관리하며, Dear ImGui로 UI를, cJSON으로 드론 쇼 파일을 파싱합니다.
+이 프로젝트는 C++ 기반의 OpenGL 애플리케이션으로, 드론 쇼를 시뮬레이션하고 시각화하기 위해 제작되었습니다.
+GLFW를 이용해 창을 관리하고, GLEW로 OpenGL 확장을 로드하며, Dear ImGui를 통해 그래픽 사용자 인터페이스(GUI)를 제공합니다.
+드론의 포메이션(배열)과 애니메이션은 JSON 설정 파일에서 불러옵니다.
 
-## 사전 준비
+## 주요 특징
 
-컴파일하기 전에 운영 체제에 맞는 빌드 환경을 설정해야 합니다.
+* **3D 시각화**: 드론 포메이션을 3D 환경에서 렌더링.
+* **카메라 컨트롤**: 3D 오빗(Orbit), 2D 탑다운(Top-down), 2D 프론트(Front) 뷰 지원.
+* **애니메이션**: 큐빅 이징(cubic easing)을 통한 부드러운 포메이션 전환.
+* **실시간 UI 조작**: 재생 속도, 타임라인 위치, 드론 크기, 표시 드론 개수 등을 실시간으로 조정.
+* **파티클 효과**: 쇼 종료 시 간단한 불꽃놀이 이펙트.
+* **JSON 지원**: 표준 JSON 파일에서 드론 위치와 색상 정보를 파싱.
 
-### Windows
+## 의존성(Dependencies)
 
-Windows에서는 MSYS2 환경을 사용하여 빌드하는 것을 권장합니다.
+이 프로젝트를 빌드하고 실행하기 위해 다음 패키지가 필요합니다:
 
-1.  **MSYS2 설치:** 공식 웹사이트([https://www.msys2.org/](https://www.msys2.org/))에서 MSYS2를 다운로드하여 설치합니다.
+* **C++ 컴파일러**: C++11 이상을 지원하는 GCC(g++).
+* **Make**: 빌드 자동화 도구.
+* **벤더 라이브러리**(프로젝트의 `vendor/` 폴더에 포함):
 
-2.  **MSYS2 터미널 열기:** 설치 후 "MSYS2 MINGW64" 터미널을 실행합니다.
+  * GLEW
+  * GLFW
+  * Dear ImGui
+  * cJSON
+  * stb_image
 
-3.  **패키지 업데이트:** 다음 명령을 실행하여 패키지 데이터베이스와 핵심 패키지를 업데이트합니다. 터미널을 닫고 다시 열라는 메시지가 표시되면 따릅니다.
-    ```sh
-    pacman -Syu
-    ```
+### 시스템 요구 사항
 
-4.  **빌드 도구 설치:** 다음 명령을 실행하여 C++ 컴파일러(`g++`), `make`, `glfw` 라이브러리를 설치합니다.
-    ```sh
-    pacman -S --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-glfw make
-    ```
+* **Linux**: `build-essential`, `libglfw3-dev`, `libglew-dev`
+  (GLEW는 vendor 제공 버전을 사용할 수 있으므로 선택 사항)
+* **Windows**: MinGW-w64 또는 유사 환경 + GLFW 라이브러리 포함
 
-### Debian/Ubuntu
+## 빌드 방법
 
-`apt-get`을 사용하여 필요한 패키지를 설치할 수 있습니다.
+### 1. Linux
+
+필요한 라이브러리를 설치한 뒤:
+
 ```bash
-sudo apt-get update
-sudo apt-get install build-essential g++ make libglfw3-dev
+sudo apt-get install build-essential libglfw3-dev
 ```
 
-## 빌드 및 실행
+프로젝트 디렉토리에서:
 
-운영 체제에 맞는 사전 준비가 완료되면 제공된 `Makefile`을 사용하여 프로젝트를 빌드하고 실행할 수 있습니다.
+```bash
+make
+```
 
-1.  **프로젝트 디렉터리로 이동:** 터미널(Windows의 경우 MSYS2 MINGW64)을 열고 프로젝트의 루트 디렉터리로 이동합니다.
+### 2. Windows
 
-2.  **프로젝트 빌드:** `make` 명령을 실행합니다.
-    ```sh
-    make
-    ```
+MSYS2 또는 MinGW에서 프로젝트 디렉토리로 이동한 후:
 
-3.  **애플리케이션 실행:** 빌드가 완료되면 실행 파일이 생성됩니다.
-    *   Windows: `drone_show.exe`
-    *   Linux/macOS: `drone_show`
+```bash
+make
+```
 
-    터미널에서 실행 파일을 실행합니다.
-    ```sh
-    # Windows
-    ./drone_show.exe
+※ Windows에서는 GLFW 라이브러리 경로 설정이 필요할 수 있습니다.
 
-    # Linux
-    ./drone_show
-    ```
+## 실행 방법
+
+빌드 후 `drone_show`(Windows는 `drone_show.exe`) 실행 파일이 생성됩니다.
+
+```bash
+./drone_show
+```
+
+애플리케이션은 기본적으로 `assets/example-drone-show.json` 파일을 로드합니다.
+
+## 조작법
+
+### 마우스
+
+* **좌클릭 드래그**:
+
+  * 3D 모드: 카메라 오빗
+  * 2D 모드: 화면 패닝(Pan)
+* **스크롤**: 줌 인/줌 아웃
+
+### 사용자 인터페이스(UI)
+
+UI 패널에서 다음을 조작할 수 있습니다:
+
+* **재생/일시정지**
+* **타임라인**(스크러버로 이동)
+* **재생 속도 조절**
+* **레이어 선택**(포메이션 간 전환)
+* **뷰 모드 전환**(3D / 2D Top / 2D Front)
+* **설정**: 불꽃놀이 효과, 시각적 옵션 등
+
+## 디렉토리 구조
+
+* `src/` : 소스 코드(`main.cpp`, 셰이더 등)
+* `vendor/` : 서드파티 라이브러리(cJSON, ImGui, Glew, stb 등)
+* `assets/` : 리소스(텍스처, JSON 생성 스크립트)
+* `Makefile` : 빌드 스크립트
