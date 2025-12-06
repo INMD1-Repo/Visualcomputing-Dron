@@ -424,9 +424,9 @@ void spawnFireworks() {
     for (int j = 0; j < numParticlesPerExplosion; ++j) {
       Particle p;
       p.pos = center;
-      float speed = 50.0f + (rand() % 150);
+      float speed = 100.0f + (rand() % 300);
       float angle1 = (rand() / (float)RAND_MAX) * PI; // Hemisphere
-      float angle2 = (rand() / (float)RAND_MAX) * 2.0f * PI;
+      float angle2 = (rand() / (float)RAND_MAX) * 3.0f * PI;
       p.vel.x = speed * sin(angle1) * cos(angle2);
       p.vel.y = speed * cos(angle1); // Y-up
       p.vel.z = speed * sin(angle1) * sin(angle2);
@@ -697,6 +697,7 @@ int main() {
     }
 
     // Update and manage particles
+    bool hadParticles = !particles.empty();
     if (!particles.empty()) {
       float gravity = 20.0f;
       for (auto it = particles.begin(); it != particles.end();) {
@@ -709,6 +710,26 @@ int main() {
           ++it;
         }
       }
+    }
+    
+    if (hadParticles && particles.empty() && enableFireworks) {
+        isPlaying = false;
+        // Reset to Pre-Takeoff state
+        initialAnimationState = PRE_TAKEOFF;
+        preTakeoffTime = 0.0f;
+        elapsedTime = 0.0f;
+        timelinePosition = 0.0f;
+        currentLayer = 0;
+        previousLayer = 0;
+        transitionElapsedTime = 0.0f;
+        
+        // Reset positions to ground formation
+        if (!groundFormation.points.empty()) {
+             animationBuffer.assign(groundFormation.points.begin(),
+                                    groundFormation.points.end());
+             animationBuffer.resize(maxDronesInShow);
+             visibleDroneCount = maxDronesInShow;
+        }
     }
 
     int numDronesToRender =
