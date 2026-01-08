@@ -420,18 +420,18 @@ void spawnFireworks() {
       color = {1.0f, 1.0f, 1.0f, 1.0f};
     }
 
-    int numParticlesPerExplosion = 100 + (rand() % 50);
+    int numParticlesPerExplosion = 300 + (rand() % 200);
     for (int j = 0; j < numParticlesPerExplosion; ++j) {
       Particle p;
       p.pos = center;
-      float speed = 100.0f + (rand() % 300);
+      float speed = 300.0f + (rand() % 600);
       float angle1 = (rand() / (float)RAND_MAX) * PI; // Hemisphere
       float angle2 = (rand() / (float)RAND_MAX) * 3.0f * PI;
       p.vel.x = speed * sin(angle1) * cos(angle2);
       p.vel.y = speed * cos(angle1); // Y-up
       p.vel.z = speed * sin(angle1) * sin(angle2);
       p.color = color;
-      p.lifetime = 1.5f + (rand() / (float)RAND_MAX) * 2.0f;
+      p.lifetime = 2.5f + (rand() / (float)RAND_MAX) * 3.0f;
       particles.push_back(p);
     }
   }
@@ -819,7 +819,16 @@ int main() {
       glUniform1i(glGetUniformLocation(droneShaderProgram, "droneTexture"), 0);
 
       glBindVertexArray(VAO);
-      glDrawArrays(GL_POINTS, 0, vertexData.size() / 7);
+      
+      // Draw Drones
+      glDrawArrays(GL_POINTS, 0, numDronesToRender);
+
+      // Draw Particles (Fireworks)
+      if (!particles.empty()) {
+           glUniform1f(glGetUniformLocation(droneShaderProgram, "drone_size"),
+                  droneSize * 4.0f); // Make particles much bigger
+           glDrawArrays(GL_POINTS, numDronesToRender, particles.size());
+      }
     }
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
